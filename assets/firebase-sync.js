@@ -1,6 +1,5 @@
 /**
  * firebase-sync.js — Maquiler
- * Doble mecanismo: intercepción de localStorage + intervalo de respaldo
  */
 (() => {
   const FIREBASE_CONFIG = {
@@ -16,9 +15,23 @@
   const CLOUDINARY_PRESET = "galeria_maquiler";
   const STORAGE_KEY       = "maquiler-site-v2";
 
-  let db           = null;
-  let lastSaved    = null; // evita guardar dos veces lo mismo
-  let isSaving     = false;
+  let db        = null;
+  let lastSaved = null;
+  let isSaving  = false;
+
+  // ── Guardar en localStorage SIN activar el interceptor ───
+  // (evita loop infinito cuando el interceptor está activo)
+  function rawSetItem(key, value) {
+    try {
+      const proto = Object.getPrototypeOf(localStorage);
+      // Si el patch está activo, usar _setItem; si no, usar setItem normal
+      const fn = proto._setItem || proto.setItem;
+      fn.call(localStorage, key, value);
+    } catch (e) {
+      // Fallback absoluto
+      try { window.localStorage.setItem(key, value); } catch (_) {}
+    }
+  }
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -37,7 +50,7 @@
     db = firebase.firestore();
   }
 
-  // ── Subir foto base64 a Cloudinary ───────────────────────
+  // ── Subir base64 a Cloudinary ─────────────────────────────
   async function uploadBase64(dataUrl) {
     const form = new FormData();
     form.append("file", dataUrl);
@@ -52,7 +65,7 @@
     return data.secure_url;
   }
 
-  // ── Convertir base64 → Cloudinary en el estado ───────────
+  // ── Convertir fotos base64 → Cloudinary en el estado ─────
   async function resolvePhotos(state) {
     const s = JSON.parse(JSON.stringify(state));
     let changed = false;
@@ -63,7 +76,7 @@
             console.log("[sync] ⬆️ Subiendo foto a Cloudinary…");
             photo.imageUrl = await uploadBase64(photo.imageUrl);
             changed = true;
-            console.log("[sync] ✅ Foto en Cloudinary:", photo.imageUrl.slice(0, 60));
+            console.log("[sync] ✅ Foto en Cloudinary:", photo.imageUrl.slice(0,60));
           } catch (e) {
             console.warn("[sync] ❌ Cloudinary falló:", e.message);
           }
@@ -71,9 +84,8 @@
       }
     }
     if (changed) {
-      // Guardar URLs limpias en localStorage (sin activar el interceptor)
-      Object.getPrototypeOf(localStorage)._setItem.call(localStorage, STORAGE_KEY, JSON.stringify(s));
-      console.log("[sync] ✅ localStorage actualizado con URLs de Cloudinary");
+      rawSetItem(STORAGE_KEY, JSON.stringify(s));
+      console.log("[sync] ✅ localStorage actualizado con URLs Cloudinary");
     }
     return s;
   }
@@ -82,7 +94,7 @@
   async function saveToFirestore(rawState) {
     if (!db || isSaving) return;
     const raw = JSON.stringify(rawState);
-    if (raw === lastSaved) return; // sin cambios
+    if (raw === lastSaved) return;
     isSaving = true;
     try {
       console.log("[sync] 💾 Guardando en Firestore…");
@@ -103,11 +115,11 @@
       console.log("[sync] 📥 Cargando desde Firestore…");
       const doc = await db.collection("state").doc("main").get();
       if (!doc.exists) {
-        console.log("[sync] ℹ️ Firestore vacío — primera vez");
+        console.log("[sync] ℹ️ Firestore vacío — sin datos aún");
         return false;
       }
       const data = doc.data();
-      Object.getPrototypeOf(localStorage)._setItem.call(localStorage, STORAGE_KEY, JSON.stringify(data));
+      rawSetItem(STORAGE_KEY, JSON.stringify(data));  // ← usa rawSetItem, sin bug
       lastSaved = JSON.stringify(data);
       console.log("[sync] ✅ Estado cargado desde Firestore");
       return true;
@@ -117,47 +129,65 @@
     }
   }
 
-  // ── INTERCEPTOR de localStorage ───────────────────────────
+  // ── Interceptar localStorage para capturar cambios ────────
   function patchLocalStorage() {
     const proto = Object.getPrototypeOf(localStorage);
     proto._setItem = proto.setItem;
     proto.setItem  = function(key, value) {
       this._setItem(key, value);
       if (this === localStorage && key === STORAGE_KEY) {
-        console.log("[sync] 🔔 localStorage cambiado — sincronizando…");
+        console.log("[sync] 🔔 Cambio detectado en localStorage");
         try { saveToFirestore(JSON.parse(value)); } catch (e) {}
       }
     };
     console.log("[sync] ✅ localStorage interceptado");
   }
 
-  // ── INTERVALO de respaldo (por si el interceptor falla) ───
+  // ── Intervalo de respaldo cada 3s ─────────────────────────
   function startBackupInterval() {
     setInterval(() => {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      if (raw === lastSaved) return;
-      console.log("[sync] 🔄 Intervalo: detectado cambio, sincronizando…");
+      if (!raw || raw === lastSaved) return;
+      console.log("[sync] 🔄 Respaldo: sincronizando cambio…");
       try { saveToFirestore(JSON.parse(raw)); } catch (e) {}
     }, 3000);
-    console.log("[sync] ✅ Intervalo de respaldo activo (3s)");
+  }
+
+  // ── Patch de compressImageFile para Cloudinary ────────────
+  function patchCompressImageFile() {
+    const tryPatch = () => {
+      const App = window.MaquilerApp;
+      if (!App?.compressImageFile) { setTimeout(tryPatch, 80); return; }
+      if (App._cloudinaryPatched) return;
+      App._cloudinaryPatched = true;
+      const original = App.compressImageFile;
+      App.compressImageFile = async function(file) {
+        try {
+          console.log("[sync] ⬆️ Subiendo foto directo a Cloudinary…");
+          const form = new FormData();
+          form.append("file", file);
+          form.append("upload_preset", CLOUDINARY_PRESET);
+          form.append("folder", "maquiler/galeria");
+          const res  = await fetch(
+            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
+            { method: "POST", body: form }
+          );
+          const data = await res.json();
+          if (data.error) throw new Error(data.error.message);
+          console.log("[sync] ✅ Foto directa en Cloudinary:", data.secure_url.slice(0,60));
+          return { dataUrl: data.secure_url, width: data.width, height: data.height };
+        } catch (e) {
+          console.warn("[sync] ❌ Upload directo falló, usando base64:", e.message);
+          return original(file);
+        }
+      };
+      console.log("[sync] ✅ compressImageFile parchado → Cloudinary");
+    };
+    tryPatch();
   }
 
   function triggerRerender() {
     window.dispatchEvent(new Event("storage"));
-  }
-
-  // ── Test de conectividad con Firestore ────────────────────
-  async function testFirestore() {
-    try {
-      await db.collection("state").doc("main").get();
-      console.log("[sync] ✅ Conexión con Firestore OK");
-      return true;
-    } catch (e) {
-      console.error("[sync] ❌ Firestore no accesible:", e.message);
-      console.error("[sync] Verificá las reglas: allow read, write: if true;");
-      return false;
-    }
   }
 
   // ── Inicialización ────────────────────────────────────────
@@ -165,8 +195,7 @@
     try { await loadFirebase(); }
     catch (e) { console.warn("[sync] Firebase no cargó:", e.message); return; }
 
-    const ok = await testFirestore();
-    if (!ok) return;
+    console.log("[sync] ✅ Firebase listo");
 
     const page = document.body?.dataset?.page || "";
 
@@ -178,6 +207,7 @@
 
     if (page === "admin-section") {
       patchLocalStorage();
+      patchCompressImageFile();
       startBackupInterval();
       const loaded = await loadFromFirestore();
       if (loaded) triggerRerender();
