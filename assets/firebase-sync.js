@@ -1,23 +1,7 @@
 /**
  * firebase-sync.js — Maquiler
- * NO guarda ninguna contraseña en el código.
- * Usa la contraseña que escribís en el formulario de login.
- *
- * Configuración necesaria (una sola vez en Firebase Console):
- *   1. Authentication → Sign-in method → Email/Password → Activar
- *   2. Authentication → Users → Add user
- *      Email: sewyllconstrucciones@gmail.com
- *      Contraseña: la misma que usás para entrar al admin
- *   3. Firestore → Rules:
- *      rules_version = '2';
- *      service cloud.firestore {
- *        match /databases/{database}/documents {
- *          match /state/main {
- *            allow read: if true;
- *            allow write: if request.auth != null;
- *          }
- *        }
- *      }
+ * Sincroniza localStorage ↔ Firestore + fotos en Cloudinary.
+ * La contraseña nunca se guarda en el código.
  */
 (() => {
   const FIREBASE_CONFIG = {
@@ -29,18 +13,15 @@
     appId:             "1:506992586359:web:a395756d063cbf74042072",
   };
 
-  // Email del admin en Firebase Auth — no es secreto
-  // La CONTRASEÑA la escribe el usuario en el formulario, nunca se guarda aquí
   const FIREBASE_ADMIN_EMAIL = "sewyllconstrucciones@gmail.com";
-
-  const CLOUDINARY_CLOUD  = "dxxyibglf";
-  const CLOUDINARY_PRESET = "galeria_maquiler";
-
-  const STORAGE_KEY  = "maquiler-site-v2";
-  const SESSION_PASS = "_mq_fsp"; // sessionStorage — se borra al cerrar el tab
+  const CLOUDINARY_CLOUD     = "dxxyibglf";
+  const CLOUDINARY_PRESET    = "galeria_maquiler";
+  const STORAGE_KEY          = "maquiler-site-v2";
+  const SESSION_PASS         = "_mq_fsp";
 
   let db = null, auth = null;
 
+  // ── Cargar SDKs Firebase ──────────────────────────────────
   function loadScript(src) {
     return new Promise((resolve, reject) => {
       if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
@@ -56,31 +37,43 @@
     await loadScript(`${base}/firebase-auth-compat.js`);
     await loadScript(`${base}/firebase-firestore-compat.js`);
     if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-    db = firebase.firestore();
+    db   = firebase.firestore();
     auth = firebase.auth();
   }
 
+  // ── Esperar a que Firebase restaure la sesión ─────────────
+  // Firebase guarda la sesión automáticamente — pero tarda un poco en restaurarla
+  function waitForAuthReady() {
+    return new Promise((resolve) => {
+      const unsub = auth.onAuthStateChanged((user) => {
+        unsub();
+        resolve(user);
+      });
+    });
+  }
+
+  // ── Autenticar con contraseña capturada del formulario ────
   async function signInWithCapturedPassword() {
-    if (auth.currentUser) return true;
     const pass = sessionStorage.getItem(SESSION_PASS);
     if (!pass) return false;
     sessionStorage.removeItem(SESSION_PASS);
     try {
       await auth.signInWithEmailAndPassword(FIREBASE_ADMIN_EMAIL, pass);
-      console.log("[sync] Firebase Auth OK");
+      console.log("[sync] Firebase Auth OK ✓");
       return true;
     } catch (e) {
-      console.info("[sync] Firebase Auth no disponible — modo localStorage");
+      console.info("[sync] Firebase Auth no disponible:", e.message);
       return false;
     }
   }
 
+  // ── Leer desde Firestore ──────────────────────────────────
   async function loadFromFirestore() {
     try {
       const doc = await db.collection("state").doc("main").get();
       if (!doc.exists) return false;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(doc.data()));
-      console.log("[sync] Estado cargado desde Firestore");
+      console.log("[sync] Estado cargado desde Firestore ✓");
       return true;
     } catch (e) {
       console.warn("[sync] Lectura fallida:", e.message);
@@ -88,16 +81,18 @@
     }
   }
 
+  // ── Guardar en Firestore ──────────────────────────────────
   async function saveToFirestore(state) {
     if (!auth?.currentUser) return;
-    try { await db.collection("state").doc("main").set(state); }
-    catch (e) { console.warn("[sync] Escritura fallida:", e.message); }
+    try {
+      await db.collection("state").doc("main").set(state);
+      console.log("[sync] Guardado en Firestore ✓");
+    } catch (e) {
+      console.warn("[sync] Escritura fallida:", e.message);
+    }
   }
 
-  function triggerRerender() {
-    window.dispatchEvent(new Event("storage"));
-  }
-
+  // ── Parchar updateState ───────────────────────────────────
   function patchUpdateState() {
     const App = window.MaquilerApp;
     if (!App?.updateState || App._syncPatched) return;
@@ -105,13 +100,14 @@
     const original = App.updateState;
     App.updateState = function(mutator) {
       const result = original(mutator);
-      saveToFirestore(result);
+      saveToFirestore(result); // async, no bloquea UI
       return result;
     };
+    console.log("[sync] updateState parchado ✓");
   }
 
+  // ── Capturar contraseña del formulario de login ───────────
   function captureLoginPassword() {
-    // Captura la contraseña ANTES que admin.js la procese (fase de captura)
     document.addEventListener("submit", (e) => {
       if (e.target.id !== "admin-login-form") return;
       const pass = e.target.querySelector('[name="password"]')?.value;
@@ -119,6 +115,7 @@
     }, true);
   }
 
+  // ── Parchar fotos → Cloudinary ────────────────────────────
   function patchCompressImageFile() {
     const tryPatch = () => {
       const App = window.MaquilerApp;
@@ -132,10 +129,13 @@
           form.append("file", file);
           form.append("upload_preset", CLOUDINARY_PRESET);
           form.append("folder", "maquiler/galeria");
-          const res  = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: "POST", body: form });
+          const res  = await fetch(
+            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
+            { method: "POST", body: form }
+          );
           const data = await res.json();
           if (data.error) throw new Error(data.error.message);
-          console.log("[sync] Foto subida a Cloudinary OK");
+          console.log("[sync] Foto subida a Cloudinary ✓");
           return { dataUrl: data.secure_url, width: data.width, height: data.height };
         } catch (e) {
           console.warn("[sync] Cloudinary falló, usando base64:", e.message);
@@ -146,27 +146,54 @@
     tryPatch();
   }
 
+  // ── Disparar re-render ────────────────────────────────────
+  function triggerRerender() {
+    window.dispatchEvent(new Event("storage"));
+  }
+
+  // ── Inicialización ────────────────────────────────────────
   async function main() {
     try { await loadFirebase(); }
     catch (e) { console.warn("[sync] Firebase no cargó:", e.message); return; }
 
     const page = document.body?.dataset?.page || "";
+
     patchCompressImageFile();
 
+    // ── Página pública ──
     if (page === "public") {
       const loaded = await loadFromFirestore();
       if (loaded) triggerRerender();
       return;
     }
 
+    // ── Login del admin ──
     if (page === "admin-login") {
       captureLoginPassword();
       return;
     }
 
+    // ── Secciones del admin ──
     if (page === "admin-section") {
-      const ok = await signInWithCapturedPassword();
-      if (ok) patchUpdateState();
+      // Parchamos updateState SIEMPRE, así queda listo cuando haya auth
+      patchUpdateState();
+
+      // 1. Esperar a que Firebase restaure la sesión guardada
+      let user = await waitForAuthReady();
+
+      // 2. Si no hay sesión guardada, intentar con contraseña del formulario
+      if (!user) {
+        await signInWithCapturedPassword();
+        user = auth.currentUser;
+      }
+
+      if (user) {
+        console.log("[sync] Autenticado como:", user.email);
+      } else {
+        console.info("[sync] Sin autenticación — cambios solo en localStorage");
+      }
+
+      // 3. Cargar estado actualizado desde Firestore
       const loaded = await loadFromFirestore();
       if (loaded) triggerRerender();
     }
