@@ -581,24 +581,36 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(145deg, #25d366, #128c4f);
+  background: #25d366;
   color: #fff;
-  box-shadow: 0 8px 28px rgba(37,211,102,0.55);
-  animation: wa-pulse 2.2s ease-in-out infinite;
+  box-shadow: 0 4px 20px rgba(37,211,102,0.5);
+  transition: transform 0.2s;
+}
+
+.floating-whatsapp:hover {
+  transform: scale(1.1);
 }
 
 .floating-whatsapp svg {
-  width: 30px;
-  height: 30px;
-  fill: #fff;
+  width: 32px;
+  height: 32px;
   display: block;
 }
 
-@keyframes wa-pulse {
-  0%, 100% {
-    box-shadow: 0 8px 28px rgba(37,211,102,0.55), 0 0 0 0 rgba(37,211,102,0.35);
-    transform: scale(1);
-  }
+.floating-whatsapp::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(37,211,102,0.5);
+  animation: wa-ring 2s ease-out infinite;
+  z-index: -1;
+}
+
+@keyframes wa-ring {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
   50% {
     box-shadow: 0 10px 34px rgba(37,211,102,0.7), 0 0 0 16px rgba(37,211,102,0);
     transform: scale(1.05);
