@@ -111,7 +111,7 @@ function bindPhotosPage(rerender) {
       try {
         const uploadedPhotos = [];
         for (const file of files) {
-          const asset = await compressImageFile(file);
+          const asset = await App.compressImageFile(file);
           uploadedPhotos.push({
             id: `photo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             imageUrl: asset.dataUrl,
