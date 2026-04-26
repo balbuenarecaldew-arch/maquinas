@@ -9,3 +9,6 @@
 
 /social-preview.jpg
   Cache-Control: public, max-age=3600
+
+/whatsapp-preview.jpg
+  Cache-Control: public, max-age=3600

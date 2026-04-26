@@ -32,8 +32,8 @@
       socialTitle: "Alquiler de Mini Cargadora",
       socialDescription: "Reservas rapidas por WhatsApp",
       socialImage: "social-preview.jpg",
-      socialImageWidth: 1080,
-      socialImageHeight: 1350,
+      socialImageWidth: 1200,
+      socialImageHeight: 630,
     },
     pricing: {
       hourlyPrice: 220000,
@@ -377,8 +377,8 @@
     const siteUrl = stripTrailingSlash(config.siteUrl || "https://maquinas.pages.dev");
     const pageUrl = siteUrl ? `${siteUrl}/` : "/";
     const siteName = normalizeText(config.siteName || config.businessName || "Maquiler");
-    const socialImageWidth = String(toNumber(config.socialImageWidth) || 1080);
-    const socialImageHeight = String(toNumber(config.socialImageHeight) || 1350);
+    const socialImageWidth = String(toNumber(config.socialImageWidth) || 1200);
+    const socialImageHeight = String(toNumber(config.socialImageHeight) || 630);
     const primaryPhoto = getPrimaryPhoto(machine);
     const socialImageSource = normalizeText(config.socialImage) || primaryPhoto?.imageUrl || "preview.jpg";
     const socialImage = buildAbsoluteUrl(socialImageSource, siteUrl);
