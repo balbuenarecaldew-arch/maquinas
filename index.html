@@ -29,10 +29,87 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Teko:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/base.css" /><link rel="stylesheet" href="assets/public.css" />
-  <script defer src="assets/icons.js"></script><script defer src="assets/shared.js"></script>
-  <script defer src="assets/ui.js"></script><script defer src="assets/public.js"></script>
-  <script defer src="assets/app.js"></script><script defer src="assets/firebase-sync.js"></script>
+  <link rel="stylesheet" href="assets/base.css?v=20260426-mobile-gallery" /><link rel="stylesheet" href="assets/public.css?v=20260426-mobile-gallery" />
+  <style>
+    @media (max-width: 820px) {
+      body[data-page="public"] .site-header { overflow: visible; }
+      body[data-page="public"] .hero-section.container {
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        max-width: none !important;
+        padding: 0 0 36px !important;
+        gap: 0 !important;
+      }
+      body[data-page="public"] .hero-visual {
+        order: -1 !important;
+        display: block !important;
+        width: 100vw !important;
+        margin-left: calc(50% - 50vw) !important;
+        margin-right: calc(50% - 50vw) !important;
+      }
+      body[data-page="public"] .hero-frame { display: none !important; }
+      body[data-page="public"] .hero-thumbs {
+        display: block !important;
+        width: 100% !important;
+      }
+      body[data-page="public"] .hero-thumb,
+      body[data-page="public"] .hero-thumb.is-active {
+        display: block !important;
+        width: 100% !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: #111 !important;
+        box-shadow: none !important;
+        transform: none !important;
+      }
+      body[data-page="public"] .hero-thumb img {
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 1 / 1 !important;
+        object-fit: cover !important;
+        border-radius: 0 !important;
+      }
+      body[data-page="public"] .hero-copy {
+        width: 100% !important;
+        max-width: none !important;
+        padding: 24px 18px 0 !important;
+      }
+      body[data-page="public"] .hero-title {
+        font-size: 42px !important;
+        line-height: 0.95 !important;
+        letter-spacing: 0 !important;
+      }
+      body[data-page="public"] .hero-subtitle {
+        margin-top: 10px !important;
+        font-size: 19px !important;
+        line-height: 1.35 !important;
+      }
+      body[data-page="public"] .hero-description { display: none !important; }
+      body[data-page="public"] .hero-facts {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+        margin-top: 18px !important;
+      }
+      body[data-page="public"] .hero-fact-card {
+        border-radius: 14px !important;
+        padding: 14px 16px !important;
+      }
+      body[data-page="public"] .floating-whatsapp {
+        width: 64px !important;
+        height: 64px !important;
+        right: 18px !important;
+        bottom: 18px !important;
+      }
+    }
+  </style>
+  <script defer src="assets/icons.js?v=20260426-mobile-gallery"></script><script defer src="assets/shared.js?v=20260426-mobile-gallery"></script>
+  <script defer src="assets/ui.js?v=20260426-mobile-gallery"></script><script defer src="assets/public.js?v=20260426-mobile-gallery"></script>
+  <script defer src="assets/app.js?v=20260426-mobile-gallery"></script><script defer src="assets/firebase-sync.js?v=20260426-mobile-gallery"></script>
 </head>
 <body data-page="public">
   <a class="skip-link" href="#contenido">Saltar al contenido principal</a>
